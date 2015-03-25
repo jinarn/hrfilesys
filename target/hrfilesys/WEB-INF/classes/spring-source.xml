@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:aop="http://www.springframework.org/schema/aop"
+	xmlns:context="http://www.springframework.org/schema/context" xmlns:tx="http://www.springframework.org/schema/tx"
+	xmlns:jee="http://www.springframework.org/schema/jee" xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+                     http://www.springframework.org/schema/beans/spring-beans.xsd
+                     http://www.springframework.org/schema/tx
+                     http://www.springframework.org/schema/tx/spring-tx.xsd
+                     http://www.springframework.org/schema/context 
+                     http://www.springframework.org/schema/context/spring-context.xsd
+                     http://www.springframework.org/schema/aop
+                     http://www.springframework.org/schema/aop/spring-aop.xsd
+                     http://www.springframework.org/schema/jee
+                     http://www.springframework.org/schema/jee/spring-jee-3.1.xsd
+                     http://www.springframework.org/schema/jdbc
+                     http://www.springframework.org/schema/jdbc/spring-jdbc-3.1.xsd" default-autowire="byName">
+
+	<aop:aspectj-autoproxy />
+	
+	<context:component-scan base-package="cn.ccsgroup.ccsframework" >
+		<context:exclude-filter expression="org.springframework.stereotype.Controller" type="annotation"/>
+	</context:component-scan>
+	
+	<bean id="localeResolver" class="org.springframework.web.servlet.i18n.SessionLocaleResolver" />
+	<bean id="messageSource" class="org.springframework.context.support.ResourceBundleMessageSource">  
+    	<property name="basename" value="messages" />
+    	<property name="useCodeAsDefaultMessage" value="true" />
+	</bean>
+
+
+	<!-- 配置文件路径定义 -->
+	<context:property-placeholder location="classpath:resources.properties" />
+
+	<!-- atomikos 分布式事务管理配置 -->
+	<bean id="atomikos" class="com.atomikos.icatch.jta.UserTransactionImp">
+		<property name="transactionTimeout" value="5000"></property>
+	</bean>
+	<bean id="atomikosTransactionManager" class="com.atomikos.icatch.jta.UserTransactionManager" destroy-method="close">
+		<property name="forceShutdown" value="true" />
+	</bean>
+	<!--事务管理器-->
+	<bean id="txManager" class="org.springframework.transaction.jta.JtaTransactionManager" >
+		<property name="userTransaction" ref="atomikos"></property>
+		<property name="transactionManager" ref="atomikosTransactionManager"></property>
+	</bean>
+	<!--金融服务平台数据源-->
+	<bean id="dataSource_fsp" class="com.atomikos.jdbc.nonxa.AtomikosNonXADataSourceBean" destroy-method="close">
+		<property name="uniqueResourceName" value="fspDataSource" />
+		<property name="driverClassName" value="${oracle.driverClassName}" />
+		<property name="url" value="${oracle.fsp.url}" />
+		<property name="user" value="${oracle.fsp.username}" />
+		<property name="password" value="${oracle.fsp.password}" />
+		<property name="poolSize" value="${oracle.fsp.poolSize}"/>
+		<property name="maxPoolSize" value="${oracle.fsp.maxPoolSize}"/>
+		<property name="minPoolSize" value="${oracle.fsp.minPoolSize}"/>
+	</bean>
+
+	<!--启用注解事务管理-->
+	<tx:annotation-driven transaction-manager="txManager" />
+
+	<!-- ehcache 管理器初始化 -->
+	<bean id="ehCacheManager"
+		class="org.springframework.cache.ehcache.EhCacheManagerFactoryBean">
+		<property name="configLocation" value="classpath:ehcache.xml" />
+	</bean>
+	<bean id="nativeJdbcExtractor"
+		class="org.springframework.jdbc.support.nativejdbc.CommonsDbcpNativeJdbcExtractor"
+		lazy-init="true" />
+	<bean id="oracleLobHandler" class="org.springframework.jdbc.support.lob.OracleLobHandler"
+		lazy-init="true">
+		<property name="nativeJdbcExtractor" ref="nativeJdbcExtractor" />
+	</bean>
+
+
+	<!-- ibatis配置fsp -->
+	<bean id="sqlMapClient_fsp"
+		class="org.springframework.orm.ibatis.SqlMapClientFactoryBean">
+		<property name="configLocation">
+			<value>classpath:sqlmap-config.xml</value>
+		</property>
+		<property name="mappingLocations">
+			<list>
+				<value>classpath:/cn/ccsgroup/ccsframework/**/sqlmap/*.xml</value>
+			</list>
+		</property>
+		<property name="lobHandler" ref="oracleLobHandler"/>
+		<property name="dataSource" ref="dataSource_fsp" />
+	</bean>
+
+	<bean id="sqlMapClientTemplate_fsp" class="org.springframework.orm.ibatis.SqlMapClientTemplate">
+		<property name="sqlMapClient">
+			<ref bean="sqlMapClient_fsp" />
+		</property>
+	</bean>
+
+	<!-- 定时删除文件(删除营业执照上传产生的临时文件，每天的00:00:00 开始删除 ) -->
+	<!--<bean id="jobDetail" class="org.springframework.scheduling.quartz.JobDetailFactoryBean">-->
+		<!--<property name="jobClass" value="cn.ccsgroup.ccsframework.quartz.FileUploadRemoveJob" />-->
+		<!--<property name="durability" value="true" />-->
+		<!--<property name="applicationContextJobDataKey" value="applicaitonContext" />-->
+	<!--</bean>-->
+	<!--<bean id="fileRemoveTrigger" class="org.springframework.scheduling.quartz.CronTriggerFactoryBean" >-->
+		<!--<property name="jobDetail" ref="jobDetail" />-->
+		<!--<property name="cronExpression" value="0 0 0 * * ?" />-->
+	<!--</bean>-->
+	<!--<bean class="org.springframework.scheduling.quartz.SchedulerFactoryBean">-->
+		<!--<property name="triggers">-->
+			<!--<list>-->
+				<!--<ref bean="fileRemoveTrigger"/>-->
+			<!--</list>-->
+		<!--</property>-->
+	<!--</bean>-->
+</beans>
